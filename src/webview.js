@@ -1,3 +1,14 @@
+function format() {
+  var args = Array.prototype.slice.call(arguments);
+  var str = args[0];
+  var i = 1;
+
+  return str.replace(/%s/g, function () {
+    return args[i++]
+  })
+}
+
+
 function WebView(options) {
   var container = options.container;
 
@@ -9,59 +20,62 @@ function WebView(options) {
     container = document.querySelector(container);
   }
 
-
   this.container = container;
+  // 滚动项
+  this.data = options.data || [];
+  // 当前显示的数据
+  this.current = 1;
+  // 滚动的3个dom对象
   this.items = [];
 
-  this.transitionPrefix = WebView.getTransitionPrefix();
-  this.prefix = 'wv-';
+  // class前缀
+  this.cssPrefix = 'wv-';
+
+  // 滚动方向
+  this.vertical = options.vertical !== undefined ? options.vertical : false;
+  this.axis = this.vertical ? 'Y' : 'X';
+
+  // 对象尺寸
   this.width = container.clientWidth;
   this.height = container.clientHeight;
-  this.axis = "X";
-  this.scale = options.isVertical ? this.height : this.width;
+  // 滚动距离
+  this.scale = this.vertical ? this.height : this.width;
+
   this._animateFunc = (options.animateType in this._animateFuncs)
     ? this._animateFuncs[options.animateType]
     : this._animateFuncs['default'];
+
 
   this.init();
 
 }
 
 
-WebView.format = function () {
-  var args = Array.prototype.slice.call(arguments);
-  var str = args[0];
-  var i = 1;
-
-  return str.replace(/%s/g, function () {
-    return args[i++]
-  })
-}
-
-WebView.getTransitionPrefix = function () {
-  var el = document.createElement("div");
-  var prefixes = ["Webkit", "Moz", "O", "ms"];
-  for (var i = 0; i < prefixes.length; i++) {
-    if (prefixes[i] + "Transition" in el.style) {
-      return prefixes[i];
-    }
-  }
-  return "transition" in el.style ? "" : false;
-}
-
-
 WebView.prototype.init = function () {
   var self = this;
-  var cssText = 'position:relative;padding:0;margin:0;overflow:hidden;width:' + self.width + 'px;height:' + self.height + 'px;';
-  var wrap = document.createElement("div");
 
-  wrap.className = self.prefix + 'wrapper';
-  wrap.style.cssText = cssText;
+  self._reanderWrapper();
+}
+
+WebView.prototype._reanderWrapper = function () {
+  var self = this;
+  var wrap = document.createElement("div");
+  var cssText = 'position:%s;' +
+    'left:0;' +
+    'top:0;' +
+    'width:%s;' +
+    'height:%s' +
+    'padding:0;' +
+    'margin:0;' +
+    'overflow:hidden;';
+
+  wrap.className = self.cssPrefix + 'wrapper';
+  wrap.style.cssText = format(cssText, 'relative', self.width, self.height);
 
   for (var i = 0; i < 3; i++) {
     var item = document.createElement("div");
     item.className = self.prefix + 'item';
-    item.style.cssText = cssText + 'position:absolute;top:0;left:0;';
+    item.style.cssText = cssText + format(cssText, 'absolute', self.width, self.height);
 
     self._animateFunc(item, self.axis, self.scale, i, 0)
     self.items.push(item);
@@ -72,53 +86,45 @@ WebView.prototype.init = function () {
   self.container.appendChild(wrap);
 }
 
-WebView.prototype._renderItem = function(dom,i){
+
+WebView.prototype._renderItem = function (dom, i) {
 
 }
 
 
-//  口 口 口
-//  [] [] [] [] []
 
-WebView.prototype.switchTo = function(index){
+WebView.prototype.switch = function (index) {
   var self = this;
   var data = self.data;
   var items = self.items;
-  var idx = index;
-  var n = index - self.current;
+  var direction = index - self.current;
+  var tmp;
 
-  if(!data[idx]){
+  if (!data[index]) {
     return;
   }
 
-
-  if (Math.abs(n) > 1) {
-    var nextEls = n > 0 ? items[2] : items[0];
+  if (Math.abs(direction) > 1) {
+    //var nextEls = n > 0 ? items[2] : items[0];
     //this._renderItem(nextEls, idx);
   }
 
-
-  // keep the right order of items
-  var sEle;
-  if (this.isVertical) {
-    if (n > 0) {
-      sEle = els.pop();
-      els.unshift(sEle);
-    } else if (n < 0) {
-      sEle = els.shift();
-      els.push(sEle);
-    }
+  if (direction > 0) {
+    tmp = items.pop();
+    items.unshift(tmp);
   } else {
-    if (n > 0) {
-      sEle = els.shift();
-      els.push(sEle);
-    } else if (n < 0) {
-      sEle = els.pop();
-      els.unshift(sEle);
-    }
+    tmp = items.shift();
+    items.push(tmp);
   }
 
 
+  // do the trick animation
+  for (var i = 0; i < 3; i++) {
+    if (items[i] !== tmp) {
+      items[i].style.webkitTransition = 'all .3s ease';
+    }
+    this._animateFunc(items[i], this.axis, this.scale, i, 0);
+  }
 
 
 }
@@ -139,6 +145,34 @@ WebView.prototype.forward = function () {
 
 WebView.prototype._animateFuncs = {
   'default': function (dom, axis, scale, i, offset) {
-    dom.style.webkitTransform = WebView.format('translateZ(0) translate%s(%spx)', axis, offset + scale * (i - 1));
+    dom.style.webkitTransform = format('translateZ(0) translate%s(%spx)', axis, offset + scale * (i - 1));
   }
 };
+
+
+/**
+ * css3属性兼容性
+ * @param property
+ * @returns {*}
+ */
+WebView.getCssPrefix = function (property) {
+  var body = document.body;
+  var prefixes = ["webkit", "moz", "o", "ms"];
+  var tmp;
+
+  if (property in body.style) {
+    return property;
+  }
+
+  tmp = name.replace(/^\w/, function (l) {
+    return l.toUpperCase();
+  })
+
+  for (var i = 0; i < prefixes.length; i++) {
+    if (prefixes[i] + tmp in el.style) {
+      return prefixes[i];
+    }
+  }
+
+  return property;
+}

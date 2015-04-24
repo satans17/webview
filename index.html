@@ -12,8 +12,13 @@
 
 <script>
     var t = new WebView({
-        container:"#test"
+        container:"#test",
+        data:[1,2,3,4,5,6,7]
     });
+
+    setInterval(function(){
+        //t.switch(3);
+    },1000)
 
 
 </script>
